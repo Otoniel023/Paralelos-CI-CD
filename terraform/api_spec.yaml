@@ -13,6 +13,12 @@ x-google-backend:
   address: ${cloud_run_url}
   protocol: h2
 
+securityDefinitions:
+  api_key:
+    type: apiKey
+    name: x-api-key
+    in: header
+
 paths:
   /api/auth/login:
     post:
@@ -45,7 +51,7 @@ paths:
       summary: Listar usuarios
       operationId: getUsers
       security:
-        - BearerAuth: []
+        - api_key: []
       responses:
         "200":
           description: Lista de usuarios
@@ -53,7 +59,7 @@ paths:
       summary: Crear usuario
       operationId: createUser
       security:
-        - BearerAuth: []
+        - api_key: []
       parameters:
         - in: body
           name: body
@@ -68,7 +74,7 @@ paths:
       summary: Obtener usuario
       operationId: getUserById
       security:
-        - BearerAuth: []
+        - api_key: []
       parameters:
         - in: path
           name: id
@@ -81,7 +87,7 @@ paths:
       summary: Actualizar usuario
       operationId: updateUser
       security:
-        - BearerAuth: []
+        - api_key: []
       parameters:
         - in: path
           name: id
@@ -98,7 +104,7 @@ paths:
       summary: Eliminar usuario
       operationId: deleteUser
       security:
-        - BearerAuth: []
+        - api_key: []
       parameters:
         - in: path
           name: id
@@ -113,14 +119,12 @@ paths:
       summary: Upload archivo
       operationId: uploadFile
       security:
-        - BearerAuth: []
-      consumes:
-        - multipart/form-data
+        - api_key: []
       parameters:
-        - in: formData
-          name: file
-          type: file
-          required: true
+        - in: body
+          name: body
+          schema:
+            type: object
       responses:
         "200":
           description: Archivo subido
@@ -132,9 +136,3 @@ paths:
       responses:
         "200":
           description: OK
-
-securityDefinitions:
-  BearerAuth:
-    type: apiKey
-    name: Authorization
-    in: header
