@@ -291,9 +291,9 @@ resource "google_api_gateway_api" "api" {
 }
 
 resource "google_api_gateway_api_config" "api_config" {
-  provider      = google-beta
-  api           = google_api_gateway_api.api.api_id
-  api_config_id = "${var.app_name}-config-v1"
+  provider             = google-beta
+  api                  = google_api_gateway_api.api.api_id
+  api_config_id_prefix = "${var.app_name}-config-"
 
   openapi_documents {
     document {
@@ -347,4 +347,3 @@ resource "google_logging_project_sink" "api_logs" {
 
   unique_writer_identity = true
 }
-
