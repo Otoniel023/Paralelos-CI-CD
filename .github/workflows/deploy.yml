@@ -1,0 +1,171 @@
+name: CI/CD Paralelos API
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: paralelos-cicd
+  REGION: us-central1
+  SERVICE: paralelos-api-service
+  REPO: docker-repo
+  IMAGE: us-central1-docker.pkg.dev/paralelos-cicd/docker-repo/paralelos-api
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Job 1: Build y Test
+  # ─────────────────────────────────────────────
+  build-and-test:
+    name: Build y Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar pruebas
+        run: npm test --if-present
+
+  # ─────────────────────────────────────────────
+  # Job 2: Docker Build y Push a Artifact Registry
+  # ─────────────────────────────────────────────
+  docker-build-push:
+    name: Docker Build y Push
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configurar gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Crear Artifact Registry si no existe
+        run: |
+          gcloud artifacts repositories describe ${{ env.REPO }} \
+            --location=${{ env.REGION }} \
+            --project=${{ env.PROJECT_ID }} 2>/dev/null || \
+          gcloud artifacts repositories create ${{ env.REPO }} \
+            --repository-format=docker \
+            --location=${{ env.REGION }} \
+            --project=${{ env.PROJECT_ID }} \
+            --description="Docker repo Paralelos API"
+
+      - name: Configurar Docker para Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build imagen Docker
+        run: |
+          docker build \
+            --tag ${{ env.IMAGE }}:${{ github.sha }} \
+            --tag ${{ env.IMAGE }}:latest \
+            .
+
+      - name: Push imagen Docker
+        run: |
+          docker push ${{ env.IMAGE }}:${{ github.sha }}
+          docker push ${{ env.IMAGE }}:latest
+
+  # ─────────────────────────────────────────────
+  # Job 3: Deploy a Cloud Run
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy Cloud Run
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configurar gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Habilitar APIs necesarias
+        run: |
+          gcloud services enable \
+            run.googleapis.com \
+            artifactregistry.googleapis.com \
+            secretmanager.googleapis.com \
+            sqladmin.googleapis.com \
+            --project=${{ env.PROJECT_ID }}
+
+      - name: Crear secretos en Secret Manager
+        run: |
+          echo -n "${{ secrets.DB_PASSWORD }}" | \
+            gcloud secrets create paralelos-db-password \
+              --data-file=- \
+              --project=${{ env.PROJECT_ID }} 2>/dev/null || \
+          echo -n "${{ secrets.DB_PASSWORD }}" | \
+            gcloud secrets versions add paralelos-db-password \
+              --data-file=- \
+              --project=${{ env.PROJECT_ID }}
+
+          echo -n "${{ secrets.JWT_SECRET }}" | \
+            gcloud secrets create paralelos-jwt-secret \
+              --data-file=- \
+              --project=${{ env.PROJECT_ID }} 2>/dev/null || \
+          echo -n "${{ secrets.JWT_SECRET }}" | \
+            gcloud secrets versions add paralelos-jwt-secret \
+              --data-file=- \
+              --project=${{ env.PROJECT_ID }}
+
+      - name: Deploy a Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image=${{ env.IMAGE }}:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --project=${{ env.PROJECT_ID }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=8080 \
+            --cpu=1 \
+            --memory=512Mi \
+            --min-instances=0 \
+            --max-instances=5 \
+            --set-env-vars="NODE_ENV=production" \
+            --set-env-vars="DB_NAME=${{ secrets.DB_NAME }}" \
+            --set-env-vars="DB_USER=${{ secrets.DB_USER }}" \
+            --set-secrets="DB_PASSWORD=paralelos-db-password:latest" \
+            --set-secrets="JWT_SECRET=paralelos-jwt-secret:latest"
+
+      - name: Obtener URL del servicio
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region=${{ env.REGION }} \
+            --project=${{ env.PROJECT_ID }} \
+            --format='value(status.url)')
+          echo "================================================"
+          echo "  SERVICIO DESPLEGADO EXITOSAMENTE"
+          echo "  URL: $URL"
+          echo "  Usar esta URL en la app movil"
+          echo "================================================"

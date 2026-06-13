@@ -1,0 +1,44 @@
+services:
+  api:
+    build: .
+    container_name: calzado_api
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: Oto162304
+      DB_NAME: calzado_db
+      JWT_SECRET: RzVnQ3lXNzB4b0R4YlQ2R2tXcTlkTnZJQ2hVQzNqY2VtS3RrQ2Q4d3FjTQ==
+      JWT_EXPIRES_IN: 1h
+      BASE_URL: http://localhost:3000
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    container_name: calzado_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: Oto162304
+      MYSQL_DATABASE: calzado_db
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pOto162304"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  uploads_data:

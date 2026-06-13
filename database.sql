@@ -13,3 +13,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
   created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- Usuario admin por defecto (password: admin123)
+INSERT IGNORE INTO usuarios (nombre, apellido, email, password, rol) VALUES
+  ('Admin', 'Sistema', 'admin@calzado.com', '$2a$10$uAxvolx.iDkG3QCbPwu0hOiliigQ6EH7XU4gilsSIgZt1tLZQOUyK', 'admin'),
+  ('Juan', 'Vendedor', 'vendedor@calzado.com', '$2a$10$uAxvolx.iDkG3QCbPwu0hOiliigQ6EH7XU4gilsSIgZt1tLZQOUyK', 'vendedor'),
+  ('Maria', 'Cliente', 'cliente@calzado.com', '$2a$10$uAxvolx.iDkG3QCbPwu0hOiliigQ6EH7XU4gilsSIgZt1tLZQOUyK', 'cliente');

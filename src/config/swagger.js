@@ -51,6 +51,17 @@ const options = {
             token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
           },
         },
+        UploadResponse: {
+          type: 'object',
+          properties: {
+            message:      { type: 'string',  example: 'Archivo subido exitosamente' },
+            filename:     { type: 'string',  example: 'a3f2c1d4-uuid.jpg' },
+            originalname: { type: 'string',  example: 'foto.jpg' },
+            mimetype:     { type: 'string',  example: 'image/jpeg' },
+            size:         { type: 'integer', example: 204800 },
+            url:          { type: 'string',  example: 'http://localhost:3000/uploads/a3f2c1d4-uuid.jpg' },
+          },
+        },
         Error: {
           type: 'object',
           properties: {
