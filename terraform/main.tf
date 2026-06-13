@@ -69,7 +69,7 @@ resource "google_project_iam_member" "run_sa_storage" {
 # Secret Manager
 # ─────────────────────────────────────────────
 resource "google_secret_manager_secret" "db_password" {
-  secret_id  = "${var.app_name}-db-password"
+  secret_id = "${var.app_name}-db-password"
   replication {
     auto {}
   }
@@ -82,7 +82,7 @@ resource "google_secret_manager_secret_version" "db_password" {
 }
 
 resource "google_secret_manager_secret" "jwt_secret" {
-  secret_id  = "${var.app_name}-jwt-secret"
+  secret_id = "${var.app_name}-jwt-secret"
   replication {
     auto {}
   }
@@ -167,7 +167,7 @@ resource "google_sql_database_instance" "postgres" {
 }
 
 resource "google_sql_database" "app_db" {
-  name     = var.db_name
+  name     = "calzado-db"
   instance = google_sql_database_instance.postgres.name
 }
 
@@ -214,18 +214,13 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
-        name  = "PORT"
-        value = "8080"
-      }
-
-      env {
         name  = "DB_USER"
         value = var.db_user
       }
 
       env {
         name  = "DB_NAME"
-        value = var.db_name
+        value = "calzado-db"
       }
 
       env {
@@ -290,8 +285,8 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
 # API Gateway
 # ─────────────────────────────────────────────
 resource "google_api_gateway_api" "api" {
-  provider = google-beta
-  api_id   = "${var.app_name}-api"
+  provider   = google-beta
+  api_id     = "${var.app_name}-api"
   depends_on = [google_project_service.apis]
 }
 
