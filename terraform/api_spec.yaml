@@ -1,0 +1,140 @@
+swagger: "2.0"
+info:
+  title: Paralelos API Gateway
+  description: API Gateway para Paralelos - Sistema de Calzado
+  version: "1.0.0"
+host: "paralelos-api-gateway.apigateway.paralelos-cicd.cloud.goog"
+schemes:
+  - https
+produces:
+  - application/json
+
+x-google-backend:
+  address: ${cloud_run_url}
+  protocol: h2
+
+paths:
+  /api/auth/login:
+    post:
+      summary: Login
+      operationId: login
+      parameters:
+        - in: body
+          name: body
+          schema:
+            type: object
+      responses:
+        "200":
+          description: Login exitoso
+
+  /api/auth/register:
+    post:
+      summary: Registro
+      operationId: register
+      parameters:
+        - in: body
+          name: body
+          schema:
+            type: object
+      responses:
+        "201":
+          description: Usuario creado
+
+  /api/users:
+    get:
+      summary: Listar usuarios
+      operationId: getUsers
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Lista de usuarios
+    post:
+      summary: Crear usuario
+      operationId: createUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: body
+          name: body
+          schema:
+            type: object
+      responses:
+        "201":
+          description: Usuario creado
+
+  /api/users/{id}:
+    get:
+      summary: Obtener usuario
+      operationId: getUserById
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          type: string
+      responses:
+        "200":
+          description: Usuario encontrado
+    put:
+      summary: Actualizar usuario
+      operationId: updateUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          type: string
+        - in: body
+          name: body
+          schema:
+            type: object
+      responses:
+        "200":
+          description: Usuario actualizado
+    delete:
+      summary: Eliminar usuario
+      operationId: deleteUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          type: string
+      responses:
+        "204":
+          description: Usuario eliminado
+
+  /api/files/upload:
+    post:
+      summary: Upload archivo
+      operationId: uploadFile
+      security:
+        - BearerAuth: []
+      consumes:
+        - multipart/form-data
+      parameters:
+        - in: formData
+          name: file
+          type: file
+          required: true
+      responses:
+        "200":
+          description: Archivo subido
+
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: OK
+
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header

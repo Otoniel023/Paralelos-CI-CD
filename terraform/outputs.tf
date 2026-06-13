@@ -3,6 +3,11 @@ output "cloud_run_url" {
   value       = google_cloud_run_v2_service.api.uri
 }
 
+output "api_gateway_url" {
+  description = "URL del API Gateway - usar esta en la app Flutter"
+  value       = "https://${google_api_gateway_gateway.gateway.default_hostname}"
+}
+
 output "artifact_registry_url" {
   description = "URL del Artifact Registry"
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/docker-repo"
@@ -16,9 +21,4 @@ output "cloud_sql_connection" {
 output "storage_bucket" {
   description = "Bucket para uploads"
   value       = google_storage_bucket.uploads.name
-}
-
-output "cloud_run_sa" {
-  description = "Service Account de Cloud Run"
-  value       = google_service_account.cloud_run_sa.email
 }

@@ -4,6 +4,9 @@
 resource "google_project_service" "apis" {
   for_each = toset([
     "run.googleapis.com",
+    "apigateway.googleapis.com",
+    "servicemanagement.googleapis.com",
+    "servicecontrol.googleapis.com",
     "artifactregistry.googleapis.com",
     "sqladmin.googleapis.com",
     "secretmanager.googleapis.com",
@@ -27,8 +30,7 @@ resource "google_artifact_registry_repository" "docker" {
   repository_id = "docker-repo"
   description   = "Docker repo para ${var.app_name}"
   format        = "DOCKER"
-
-  depends_on = [google_project_service.apis]
+  depends_on    = [google_project_service.apis]
 }
 
 # ─────────────────────────────────────────────
@@ -57,11 +59,17 @@ resource "google_project_iam_member" "run_sa_logging" {
   member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
 }
 
+resource "google_project_iam_member" "run_sa_storage" {
+  project = var.project_id
+  role    = "roles/storage.objectAdmin"
+  member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+}
+
 # ─────────────────────────────────────────────
 # Secret Manager
 # ─────────────────────────────────────────────
 resource "google_secret_manager_secret" "db_password" {
-  secret_id = "${var.app_name}-db-password"
+  secret_id  = "${var.app_name}-db-password"
   replication { auto {} }
   depends_on = [google_project_service.apis]
 }
@@ -72,7 +80,7 @@ resource "google_secret_manager_secret_version" "db_password" {
 }
 
 resource "google_secret_manager_secret" "jwt_secret" {
-  secret_id = "${var.app_name}-jwt-secret"
+  secret_id  = "${var.app_name}-jwt-secret"
   replication { auto {} }
   depends_on = [google_project_service.apis]
 }
@@ -217,7 +225,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
-        name = "DB_SOCKET_PATH"
+        name  = "DB_SOCKET_PATH"
         value = "/cloudsql/${var.project_id}:${var.region}:${var.app_name}-db"
       }
 
@@ -275,14 +283,52 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
 }
 
 # ─────────────────────────────────────────────
-# Storage Bucket para uploads de archivos
+# API Gateway
+# ─────────────────────────────────────────────
+resource "google_api_gateway_api" "api" {
+  provider = google-beta
+  api_id   = "${var.app_name}-api"
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_api_gateway_api_config" "api_config" {
+  provider      = google-beta
+  api           = google_api_gateway_api.api.api_id
+  api_config_id = "${var.app_name}-config-v1"
+
+  openapi_documents {
+    document {
+      path     = "spec.yaml"
+      contents = base64encode(templatefile("${path.module}/api_spec.yaml", {
+        cloud_run_url = google_cloud_run_v2_service.api.uri
+      }))
+    }
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  depends_on = [google_cloud_run_v2_service.api]
+}
+
+resource "google_api_gateway_gateway" "gateway" {
+  provider   = google-beta
+  api_config = google_api_gateway_api_config.api_config.id
+  gateway_id = "${var.app_name}-gateway"
+  region     = var.region
+  depends_on = [google_api_gateway_api_config.api_config]
+}
+
+# ─────────────────────────────────────────────
+# Storage Bucket para uploads
 # ─────────────────────────────────────────────
 resource "google_storage_bucket" "uploads" {
-  name     = "${var.project_id}-${var.app_name}-uploads"
-  location = var.region
+  name          = "${var.project_id}-${var.app_name}-uploads"
+  location      = var.region
+  force_destroy = true
 
   uniform_bucket_level_access = true
-  force_destroy               = true
 
   cors {
     origin          = ["*"]
@@ -290,12 +336,6 @@ resource "google_storage_bucket" "uploads" {
     response_header = ["*"]
     max_age_seconds = 3600
   }
-}
-
-resource "google_storage_bucket_iam_member" "run_sa_storage" {
-  bucket = google_storage_bucket.uploads.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.cloud_run_sa.email}"
 }
 
 # ─────────────────────────────────────────────

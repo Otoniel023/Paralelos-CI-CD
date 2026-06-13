@@ -9,7 +9,6 @@ env:
   PROJECT_ID: paralelos-cicd
   REGION: us-central1
   SERVICE: paralelos-api-service
-  REPO: docker-repo
   IMAGE: us-central1-docker.pkg.dev/paralelos-cicd/docker-repo/paralelos-api
 
 jobs:
@@ -37,7 +36,7 @@ jobs:
         run: npm test --if-present
 
   # ─────────────────────────────────────────────
-  # Job 2: Docker Build y Push a Artifact Registry
+  # Job 2: Docker Build y Push
   # ─────────────────────────────────────────────
   docker-build-push:
     name: Docker Build y Push
@@ -62,10 +61,10 @@ jobs:
 
       - name: Crear Artifact Registry si no existe
         run: |
-          gcloud artifacts repositories describe ${{ env.REPO }} \
+          gcloud artifacts repositories describe docker-repo \
             --location=${{ env.REGION }} \
             --project=${{ env.PROJECT_ID }} 2>/dev/null || \
-          gcloud artifacts repositories create ${{ env.REPO }} \
+          gcloud artifacts repositories create docker-repo \
             --repository-format=docker \
             --location=${{ env.REGION }} \
             --project=${{ env.PROJECT_ID }} \
@@ -87,12 +86,68 @@ jobs:
           docker push ${{ env.IMAGE }}:latest
 
   # ─────────────────────────────────────────────
-  # Job 3: Deploy a Cloud Run
+  # Job 3: Terraform Plan y Apply
+  # ─────────────────────────────────────────────
+  terraform:
+    name: Terraform Plan y Apply
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var="project_id=${{ env.PROJECT_ID }}" \
+            -var="region=${{ env.REGION }}" \
+            -var="cloud_run_image=${{ env.IMAGE }}:${{ github.sha }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
+            -var="db_user=${{ secrets.DB_USER }}" \
+            -var="db_name=${{ secrets.DB_NAME }}" \
+            -out=tfplan \
+            -no-color
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+      - name: Obtener outputs
+        run: |
+          echo "Cloud Run URL: $(terraform output -raw cloud_run_url)"
+          echo "API Gateway URL: $(terraform output -raw api_gateway_url 2>/dev/null || echo 'pendiente')"
+
+  # ─────────────────────────────────────────────
+  # Job 4: Deploy Cloud Run
   # ─────────────────────────────────────────────
   deploy:
     name: Deploy Cloud Run
     runs-on: ubuntu-latest
-    needs: docker-build-push
+    needs: terraform
     permissions:
       contents: read
       id-token: write
@@ -109,35 +164,6 @@ jobs:
 
       - name: Configurar gcloud
         uses: google-github-actions/setup-gcloud@v2
-
-      - name: Habilitar APIs necesarias
-        run: |
-          gcloud services enable \
-            run.googleapis.com \
-            artifactregistry.googleapis.com \
-            secretmanager.googleapis.com \
-            sqladmin.googleapis.com \
-            --project=${{ env.PROJECT_ID }}
-
-      - name: Crear secretos en Secret Manager
-        run: |
-          echo -n "${{ secrets.DB_PASSWORD }}" | \
-            gcloud secrets create paralelos-db-password \
-              --data-file=- \
-              --project=${{ env.PROJECT_ID }} 2>/dev/null || \
-          echo -n "${{ secrets.DB_PASSWORD }}" | \
-            gcloud secrets versions add paralelos-db-password \
-              --data-file=- \
-              --project=${{ env.PROJECT_ID }}
-
-          echo -n "${{ secrets.JWT_SECRET }}" | \
-            gcloud secrets create paralelos-jwt-secret \
-              --data-file=- \
-              --project=${{ env.PROJECT_ID }} 2>/dev/null || \
-          echo -n "${{ secrets.JWT_SECRET }}" | \
-            gcloud secrets versions add paralelos-jwt-secret \
-              --data-file=- \
-              --project=${{ env.PROJECT_ID }}
 
       - name: Deploy a Cloud Run
         run: |
@@ -158,14 +184,21 @@ jobs:
             --set-secrets="DB_PASSWORD=paralelos-db-password:latest" \
             --set-secrets="JWT_SECRET=paralelos-jwt-secret:latest"
 
-      - name: Obtener URL del servicio
+      - name: Obtener URL y verificar
         run: |
           URL=$(gcloud run services describe ${{ env.SERVICE }} \
             --region=${{ env.REGION }} \
             --project=${{ env.PROJECT_ID }} \
             --format='value(status.url)')
           echo "================================================"
-          echo "  SERVICIO DESPLEGADO EXITOSAMENTE"
+          echo "  Build             OK"
+          echo "  Test              OK"
+          echo "  Docker Build      OK"
+          echo "  Artifact Registry OK"
+          echo "  Terraform Plan    OK"
+          echo "  Terraform Apply   OK"
+          echo "  Deploy Cloud Run  OK"
+          echo "================================================"
           echo "  URL: $URL"
-          echo "  Usar esta URL en la app movil"
+          echo "  Usar esta URL en la app Flutter"
           echo "================================================"
