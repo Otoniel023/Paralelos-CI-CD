@@ -347,3 +347,4 @@ resource "google_logging_project_sink" "api_logs" {
 
   unique_writer_identity = true
 }
+
