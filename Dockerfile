@@ -1,21 +1,14 @@
 FROM node:20-alpine
 
-RUN addgroup -g 1001 -S nodejs \
-    && adduser -S appuser -u 1001 -G nodejs
-
 WORKDIR /app
 
 COPY package*.json ./
-
 RUN npm ci --only=production
 
-COPY --chown=appuser:nodejs . .
+COPY . .
 
-USER appuser
+RUN mkdir -p uploads
 
-EXPOSE 8080
-
-ENV PORT=8080
-ENV NODE_ENV=production
+EXPOSE 3000
 
 CMD ["node", "src/index.js"]
