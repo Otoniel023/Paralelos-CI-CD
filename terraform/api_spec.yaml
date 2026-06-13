@@ -20,7 +20,15 @@ securityDefinitions:
     in: header
 
 paths:
-  /api/auth/login:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: OK
+
+  /api/usuarios/login:
     post:
       summary: Login
       operationId: login
@@ -33,7 +41,7 @@ paths:
         "200":
           description: Login exitoso
 
-  /api/auth/register:
+  /api/usuarios/register:
     post:
       summary: Registro
       operationId: register
@@ -46,7 +54,7 @@ paths:
         "201":
           description: Usuario creado
 
-  /api/users:
+  /api/usuarios:
     get:
       summary: Listar usuarios
       operationId: getUsers
@@ -69,7 +77,7 @@ paths:
         "201":
           description: Usuario creado
 
-  /api/users/{id}:
+  /api/usuarios/{id}:
     get:
       summary: Obtener usuario
       operationId: getUserById
@@ -114,7 +122,7 @@ paths:
         "204":
           description: Usuario eliminado
 
-  /api/files/upload:
+  /api/upload:
     post:
       summary: Upload archivo
       operationId: uploadFile
@@ -128,11 +136,3 @@ paths:
       responses:
         "200":
           description: Archivo subido
-
-  /health:
-    get:
-      summary: Health check
-      operationId: healthCheck
-      responses:
-        "200":
-          description: OK
