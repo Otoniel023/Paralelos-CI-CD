@@ -70,7 +70,9 @@ resource "google_project_iam_member" "run_sa_storage" {
 # ─────────────────────────────────────────────
 resource "google_secret_manager_secret" "db_password" {
   secret_id  = "${var.app_name}-db-password"
-  replication { auto {} }
+  replication {
+    auto {}
+  }
   depends_on = [google_project_service.apis]
 }
 
@@ -81,7 +83,9 @@ resource "google_secret_manager_secret_version" "db_password" {
 
 resource "google_secret_manager_secret" "jwt_secret" {
   secret_id  = "${var.app_name}-jwt-secret"
-  replication { auto {} }
+  replication {
+    auto {}
+  }
   depends_on = [google_project_service.apis]
 }
 
