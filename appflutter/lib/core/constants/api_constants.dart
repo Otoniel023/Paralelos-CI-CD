@@ -1,8 +1,10 @@
 class ApiConstants {
-  // 10.0.2.2 apunta al localhost del host desde el emulador Android
-  static const String baseUrl = 'http://10.0.2.2:3000';
+  static const String baseUrl =
+      'https://paralelos-api-gateway-8y7jikv7.uc.gateway.dev';
 
-  static const String login    = '/api/usuarios/login';
+  static const String apiKey = 'AIzaSyDoWRiRx3jdJIiqFCN5ufHrrskkKC3iUec';
+
+  static const String login = '/api/usuarios/login';
   static const String usuarios = '/api/usuarios';
-  static const String upload   = '/api/upload';
+  static const String upload = '/api/upload';
 }

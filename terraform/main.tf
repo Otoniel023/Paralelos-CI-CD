@@ -224,6 +224,16 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name  = "JWT_EXPIRES_IN"
+        value = "1h"
+      }
+
+      env {
+        name  = "DB_SOCKET_PATH"
+        value = "/cloudsql/${var.project_id}:${var.region}:${var.app_name}-db"
+      }
+
+      env {
         name  = "DB_SOCKET_PATH"
         value = "/cloudsql/${var.project_id}:${var.region}:${var.app_name}-db"
       }

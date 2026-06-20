@@ -6,7 +6,7 @@ class UserModel {
   final String apellido;
   final String email;
   final String rol;
-  final int    activo;
+  final bool   activo;
 
   const UserModel({
     required this.id,
@@ -23,7 +23,7 @@ class UserModel {
     apellido: json['apellido'],
     email:    json['email'],
     rol:      json['rol'],
-    activo:   json['activo'] ?? 1,
+    activo:   json['activo'] == true || json['activo'] == 1,
   );
 
   Map<String, dynamic> toJson() => {

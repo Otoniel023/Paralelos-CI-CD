@@ -18,6 +18,7 @@ class ApiClient {
     // Interceptor que inyecta el JWT automáticamente en cada request
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
+        options.headers['x-api-key'] = ApiConstants.apiKey;
         final token = await TokenStorage.getToken();
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
