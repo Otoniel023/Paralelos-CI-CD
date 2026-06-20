@@ -47,4 +47,16 @@ class UserRepository {
     final res = await _dio.post(ApiConstants.upload, data: formData);
     return res.data as Map<String, dynamic>;
   }
+
+  Future<void> sendNotification({
+    required String email,
+    required String subject,
+    required String message,
+  }) async {
+    await _dio.post(ApiConstants.notifications, data: {
+      'email': email,
+      'subject': subject,
+      'message': message,
+    });
+  }
 }

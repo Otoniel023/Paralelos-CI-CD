@@ -7,4 +7,5 @@ class ApiConstants {
   static const String login = '/api/usuarios/login';
   static const String usuarios = '/api/usuarios';
   static const String upload = '/api/upload';
+  static const String notifications = '/api/notifications/send';
 }

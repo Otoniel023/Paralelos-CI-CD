@@ -5,6 +5,7 @@ import '../../core/storage/token_storage.dart';
 import '../../data/models/user_model.dart';
 import '../auth/login_view.dart';
 import '../upload/upload_view.dart';
+import '../notification/notification_view.dart';
 import 'users_list_viewmodel.dart';
 import 'user_form_view.dart';
 
@@ -107,6 +108,13 @@ class _UsersListViewState extends State<UsersListView> {
               backgroundColor: Colors.indigo,
               foregroundColor: Colors.white,
               actions: [
+                IconButton(
+                  icon: const Icon(Icons.notifications_outlined),
+                  tooltip: 'Enviar notificación',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const NotificationView()),
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.upload_file),
                   tooltip: 'Subir archivo',
