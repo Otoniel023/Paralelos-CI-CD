@@ -45,3 +45,9 @@ variable "db_user" {
   type        = string
   default     = "appuser"
 }
+
+variable "notification_image" {
+  description = "Imagen Docker para Cloud Run de notificaciones"
+  type        = string
+  default     = "us-central1-docker.pkg.dev/paralelos-cicd/docker-repo/notification-cloud-run:latest"
+}

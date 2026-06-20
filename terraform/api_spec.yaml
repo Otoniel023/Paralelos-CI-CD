@@ -12,9 +12,24 @@ produces:
 x-google-backend:
   address: ${cloud_run_url}
   protocol: h2
+  disable_auth: true
+
+securityDefinitions:
+  api_key:
+    type: apiKey
+    name: x-api-key
+    in: header
 
 paths:
-  /api/auth/login:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: OK
+
+  /api/usuarios/login:
     post:
       summary: Login
       operationId: login
@@ -27,7 +42,7 @@ paths:
         "200":
           description: Login exitoso
 
-  /api/auth/register:
+  /api/usuarios/register:
     post:
       summary: Registro
       operationId: register
@@ -40,12 +55,12 @@ paths:
         "201":
           description: Usuario creado
 
-  /api/users:
+  /api/usuarios:
     get:
       summary: Listar usuarios
       operationId: getUsers
       security:
-        - BearerAuth: []
+        - api_key: []
       responses:
         "200":
           description: Lista de usuarios
@@ -53,7 +68,7 @@ paths:
       summary: Crear usuario
       operationId: createUser
       security:
-        - BearerAuth: []
+        - api_key: []
       parameters:
         - in: body
           name: body
@@ -63,12 +78,12 @@ paths:
         "201":
           description: Usuario creado
 
-  /api/users/{id}:
+  /api/usuarios/{id}:
     get:
       summary: Obtener usuario
       operationId: getUserById
       security:
-        - BearerAuth: []
+        - api_key: []
       parameters:
         - in: path
           name: id
@@ -81,7 +96,7 @@ paths:
       summary: Actualizar usuario
       operationId: updateUser
       security:
-        - BearerAuth: []
+        - api_key: []
       parameters:
         - in: path
           name: id
@@ -98,7 +113,7 @@ paths:
       summary: Eliminar usuario
       operationId: deleteUser
       security:
-        - BearerAuth: []
+        - api_key: []
       parameters:
         - in: path
           name: id
@@ -108,33 +123,40 @@ paths:
         "204":
           description: Usuario eliminado
 
-  /api/files/upload:
+  /api/upload:
     post:
       summary: Upload archivo
       operationId: uploadFile
       security:
-        - BearerAuth: []
-      consumes:
-        - multipart/form-data
+        - api_key: []
       parameters:
-        - in: formData
-          name: file
-          type: file
-          required: true
+        - in: body
+          name: body
+          schema:
+            type: object
       responses:
         "200":
           description: Archivo subido
 
-  /health:
-    get:
-      summary: Health check
-      operationId: healthCheck
+  /api/notifications/send:
+    post:
+      summary: Enviar notificación via Pub/Sub
+      operationId: sendNotification
+      security:
+        - api_key: []
+      parameters:
+        - in: body
+          name: body
+          schema:
+            type: object
+            required: [email, subject, message]
+            properties:
+              email:
+                type: string
+              subject:
+                type: string
+              message:
+                type: string
       responses:
         "200":
-          description: OK
-
-securityDefinitions:
-  BearerAuth:
-    type: apiKey
-    name: Authorization
-    in: header
+          description: Mensaje publicado en Pub/Sub
