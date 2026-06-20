@@ -6,6 +6,7 @@ const swaggerUi   = require('swagger-ui-express');
 const swaggerSpec  = require('./config/swagger');
 const userRoutes = require('./interfaces/http/routes/userRoutes');
 const uploadRoutes = require('./interfaces/http/routes/uploadRoutes');
+const notificationRoutes = require('./interfaces/http/routes/notificationRoutes');
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/usuarios', userRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
 
