@@ -9,7 +9,9 @@ env:
   PROJECT_ID: paralelos-cicd
   REGION: us-central1
   SERVICE: paralelos-api-service
+  NOTIFICATION_SERVICE: notification-cloud-run
   IMAGE: us-central1-docker.pkg.dev/paralelos-cicd/docker-repo/paralelos-api
+  NOTIFICATION_IMAGE: us-central1-docker.pkg.dev/paralelos-cicd/docker-repo/notification-cloud-run
 
 jobs:
   # ─────────────────────────────────────────────
@@ -36,10 +38,10 @@ jobs:
         run: npm test --if-present
 
   # ─────────────────────────────────────────────
-  # Job 2: Docker Build y Push
+  # Job 2: Docker Build y Push - API Principal
   # ─────────────────────────────────────────────
   docker-build-push:
-    name: Docker Build y Push
+    name: Docker Build y Push - API
     runs-on: ubuntu-latest
     needs: build-and-test
     permissions:
@@ -86,12 +88,51 @@ jobs:
           docker push ${{ env.IMAGE }}:latest
 
   # ─────────────────────────────────────────────
-  # Job 3: Terraform Plan y Apply
+  # Job 3: Docker Build y Push - Notificaciones
+  # ─────────────────────────────────────────────
+  docker-build-push-notification:
+    name: Docker Build y Push - Notificaciones
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configurar gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configurar Docker para Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build imagen Docker - Notificaciones
+        run: |
+          docker build \
+            --tag ${{ env.NOTIFICATION_IMAGE }}:${{ github.sha }} \
+            --tag ${{ env.NOTIFICATION_IMAGE }}:latest \
+            ./notification-cloud-run
+
+      - name: Push imagen Docker - Notificaciones
+        run: |
+          docker push ${{ env.NOTIFICATION_IMAGE }}:${{ github.sha }}
+          docker push ${{ env.NOTIFICATION_IMAGE }}:latest
+
+  # ─────────────────────────────────────────────
+  # Job 4: Terraform Plan y Apply
   # ─────────────────────────────────────────────
   terraform:
     name: Terraform Plan y Apply
     runs-on: ubuntu-latest
-    needs: docker-build-push
+    needs: [docker-build-push, docker-build-push-notification]
     permissions:
       contents: read
       id-token: write
@@ -126,6 +167,7 @@ jobs:
             -var="project_id=${{ env.PROJECT_ID }}" \
             -var="region=${{ env.REGION }}" \
             -var="cloud_run_image=${{ env.IMAGE }}:${{ github.sha }}" \
+            -var="notification_image=${{ env.NOTIFICATION_IMAGE }}:${{ github.sha }}" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
             -var="db_user=${{ secrets.DB_USER }}" \
@@ -138,14 +180,16 @@ jobs:
 
       - name: Obtener outputs
         run: |
-          echo "Cloud Run URL: $(terraform output -raw cloud_run_url)"
-          echo "API Gateway URL: $(terraform output -raw api_gateway_url 2>/dev/null || echo 'pendiente')"
+          echo "Cloud Run URL:              $(terraform output -raw cloud_run_url)"
+          echo "Notification Cloud Run URL: $(terraform output -raw notification_cloud_run_url)"
+          echo "Pub/Sub Topic:              $(terraform output -raw pubsub_topic)"
+          echo "API Gateway URL:            $(terraform output -raw api_gateway_url 2>/dev/null || echo 'pendiente')"
 
   # ─────────────────────────────────────────────
-  # Job 4: Deploy Cloud Run
+  # Job 5: Deploy Cloud Run - API Principal
   # ─────────────────────────────────────────────
   deploy:
-    name: Deploy Cloud Run
+    name: Deploy Cloud Run - API
     runs-on: ubuntu-latest
     needs: terraform
     permissions:
@@ -177,25 +221,74 @@ jobs:
             --memory=512Mi \
             --min-instances=0 \
             --max-instances=5 \
-            --set-env-vars="NODE_ENV=production,DB_NAME=${{ secrets.DB_NAME }},DB_USER=${{ secrets.DB_USER }},DB_SOCKET_PATH=/cloudsql/paralelos-cicd:us-central1:paralelos-api-db,JWT_EXPIRES_IN=1h" \
+            --set-env-vars="NODE_ENV=production,DB_NAME=${{ secrets.DB_NAME }},DB_USER=${{ secrets.DB_USER }},DB_SOCKET_PATH=/cloudsql/paralelos-cicd:us-central1:paralelos-api-db,JWT_EXPIRES_IN=1h,GCP_PROJECT_ID=paralelos-cicd,PUBSUB_TOPIC=paralelos-api-notifications" \
             --set-secrets="DB_PASSWORD=paralelos-db-password:latest" \
             --set-secrets="JWT_SECRET=paralelos-jwt-secret:latest"
 
-      - name: Obtener URL y verificar
+      - name: Obtener URL del servicio
         run: |
           URL=$(gcloud run services describe ${{ env.SERVICE }} \
             --region=${{ env.REGION }} \
             --project=${{ env.PROJECT_ID }} \
             --format='value(status.url)')
+          echo "API Principal: $URL"
+
+  # ─────────────────────────────────────────────
+  # Job 6: Deploy Cloud Run - Notificaciones
+  # ─────────────────────────────────────────────
+  deploy-notification:
+    name: Deploy Cloud Run - Notificaciones
+    runs-on: ubuntu-latest
+    needs: terraform
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configurar gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy notification-cloud-run
+        run: |
+          gcloud run deploy ${{ env.NOTIFICATION_SERVICE }} \
+            --image=${{ env.NOTIFICATION_IMAGE }}:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --project=${{ env.PROJECT_ID }} \
+            --platform=managed \
+            --no-allow-unauthenticated \
+            --cpu=1 \
+            --memory=256Mi \
+            --min-instances=0 \
+            --max-instances=3 \
+            --set-env-vars="RESEND_API_KEY=re_fdE7x1Vz_9X5N6HCQwV7B4kUHAsMVRuH1,FROM_EMAIL=onboarding@resend.dev"
+
+      - name: Resumen final
+        run: |
+          API_URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region=${{ env.REGION }} \
+            --project=${{ env.PROJECT_ID }} \
+            --format='value(status.url)')
+          NOTIF_URL=$(gcloud run services describe ${{ env.NOTIFICATION_SERVICE }} \
+            --region=${{ env.REGION }} \
+            --project=${{ env.PROJECT_ID }} \
+            --format='value(status.url)')
           echo "================================================"
-          echo "  Build             OK"
-          echo "  Test              OK"
-          echo "  Docker Build      OK"
-          echo "  Artifact Registry OK"
-          echo "  Terraform Plan    OK"
-          echo "  Terraform Apply   OK"
-          echo "  Deploy Cloud Run  OK"
+          echo "  Build API             OK"
+          echo "  Build Notificaciones  OK"
+          echo "  Terraform Apply       OK"
+          echo "  Deploy API            OK"
+          echo "  Deploy Notificaciones OK"
           echo "================================================"
-          echo "  URL: $URL"
-          echo "  Usar esta URL en la app Flutter"
+          echo "  API Principal:        $API_URL"
+          echo "  Notificaciones:       $NOTIF_URL"
+          echo "  Pub/Sub Topic:        paralelos-api-notifications"
           echo "================================================"

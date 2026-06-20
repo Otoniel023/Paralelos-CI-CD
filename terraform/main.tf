@@ -1,6 +1,10 @@
 # ─────────────────────────────────────────────
 # APIs habilitadas
 # ─────────────────────────────────────────────
+data "google_project" "project" {
+  project_id = var.project_id
+}
+
 resource "google_project_service" "apis" {
   for_each = toset([
     "run.googleapis.com",
@@ -8,6 +12,7 @@ resource "google_project_service" "apis" {
     "servicemanagement.googleapis.com",
     "servicecontrol.googleapis.com",
     "artifactregistry.googleapis.com",
+    "pubsub.googleapis.com",
     "sqladmin.googleapis.com",
     "secretmanager.googleapis.com",
     "cloudbuild.googleapis.com",
@@ -354,6 +359,127 @@ resource "google_logging_project_sink" "api_logs" {
   name        = "${var.app_name}-logs"
   destination = "logging.googleapis.com/projects/${var.project_id}/locations/global/buckets/_Default"
   filter      = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${var.app_name}-service\""
+
+  unique_writer_identity = true
+}
+
+# ─────────────────────────────────────────────
+# Pub/Sub
+# ─────────────────────────────────────────────
+resource "google_pubsub_topic" "notifications" {
+  name       = "${var.app_name}-notifications"
+  depends_on = [google_project_service.apis]
+}
+
+# ─────────────────────────────────────────────
+# Service Account para Pub/Sub → Cloud Run
+# ─────────────────────────────────────────────
+resource "google_service_account" "pubsub_invoker_sa" {
+  account_id   = "${var.app_name}-pubsub-sa"
+  display_name = "Pub/Sub Push Invoker SA"
+}
+
+# ─────────────────────────────────────────────
+# Service Account para Cloud Run Notificaciones
+# ─────────────────────────────────────────────
+resource "google_service_account" "notification_sa" {
+  account_id   = "${var.app_name}-notif-sa"
+  display_name = "Notification Cloud Run SA"
+}
+
+resource "google_project_iam_member" "notification_sa_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.notification_sa.email}"
+}
+
+# ─────────────────────────────────────────────
+# Cloud Run - Notificaciones
+# ─────────────────────────────────────────────
+resource "google_cloud_run_v2_service" "notifications" {
+  name     = "notification-cloud-run"
+  location = var.region
+
+  template {
+    service_account = google_service_account.notification_sa.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 3
+    }
+
+    containers {
+      image = var.notification_image
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "256Mi"
+        }
+        cpu_idle = true
+      }
+
+      env {
+        name  = "RESEND_API_KEY"
+        value = "re_fdE7x1Vz_9X5N6HCQwV7B4kUHAsMVRuH1"
+      }
+
+      env {
+        name  = "FROM_EMAIL"
+        value = "onboarding@resend.dev"
+      }
+    }
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# IAM: Pub/Sub SA puede invocar la Cloud Run de notificaciones
+resource "google_cloud_run_v2_service_iam_member" "pubsub_can_invoke_notifications" {
+  location = google_cloud_run_v2_service.notifications.location
+  name     = google_cloud_run_v2_service.notifications.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.pubsub_invoker_sa.email}"
+}
+
+# IAM: Backend principal puede publicar en Pub/Sub
+resource "google_pubsub_topic_iam_member" "backend_can_publish" {
+  topic  = google_pubsub_topic.notifications.name
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+}
+
+# ─────────────────────────────────────────────
+# Pub/Sub Suscripción Push → Cloud Run
+# ─────────────────────────────────────────────
+resource "google_pubsub_subscription" "notifications_push" {
+  name  = "${var.app_name}-notifications-push"
+  topic = google_pubsub_topic.notifications.name
+
+  push_config {
+    push_endpoint = "${google_cloud_run_v2_service.notifications.uri}/pubsub"
+
+    oidc_token {
+      service_account_email = google_service_account.pubsub_invoker_sa.email
+    }
+  }
+
+  ack_deadline_seconds       = 30
+  message_retention_duration = "600s"
+
+  depends_on = [
+    google_cloud_run_v2_service.notifications,
+    google_cloud_run_v2_service_iam_member.pubsub_can_invoke_notifications,
+  ]
+}
+
+# ─────────────────────────────────────────────
+# Cloud Logging - Notificaciones
+# ─────────────────────────────────────────────
+resource "google_logging_project_sink" "notification_logs" {
+  name        = "${var.app_name}-notification-logs"
+  destination = "logging.googleapis.com/projects/${var.project_id}/locations/global/buckets/_Default"
+  filter      = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"notification-cloud-run\""
 
   unique_writer_identity = true
 }

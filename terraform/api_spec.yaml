@@ -12,6 +12,7 @@ produces:
 x-google-backend:
   address: ${cloud_run_url}
   protocol: h2
+  disable_auth: true
 
 securityDefinitions:
   api_key:
@@ -136,3 +137,26 @@ paths:
       responses:
         "200":
           description: Archivo subido
+
+  /api/notifications/send:
+    post:
+      summary: Enviar notificación via Pub/Sub
+      operationId: sendNotification
+      security:
+        - api_key: []
+      parameters:
+        - in: body
+          name: body
+          schema:
+            type: object
+            required: [email, subject, message]
+            properties:
+              email:
+                type: string
+              subject:
+                type: string
+              message:
+                type: string
+      responses:
+        "200":
+          description: Mensaje publicado en Pub/Sub

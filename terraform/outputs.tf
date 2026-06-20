@@ -22,3 +22,13 @@ output "storage_bucket" {
   description = "Bucket para uploads"
   value       = google_storage_bucket.uploads.name
 }
+
+output "notification_cloud_run_url" {
+  description = "URL del Cloud Run de notificaciones"
+  value       = google_cloud_run_v2_service.notifications.uri
+}
+
+output "pubsub_topic" {
+  description = "Nombre del topic Pub/Sub"
+  value       = google_pubsub_topic.notifications.name
+}
